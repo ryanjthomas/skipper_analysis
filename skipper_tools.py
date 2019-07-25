@@ -4,6 +4,25 @@ from astropy.io import fits
 import matplotlib.pyplot as plt
 from matplotlib import colors
 
+def plot_2d(data,cmap="spectral",xlim=None, ylim=None, title=None, units="ADU"):
+  data=np.array(data)
+  fig=plt.figure()
+  mesh=plt.pcolormesh(data-np.min(data),cmap=plt.get_cmap(cmap), norm=colors.LogNorm())
+    
+  ax=mesh.axes
+  ax.set_aspect("equal")
+  if xlim is not None:
+    ax.set_xlim(right=xlim)
+  if ylim is not None:
+    ax.set_ylim(top=ylim)
+  cbar=plt.colorbar()
+  cbar.set_label(units)
+  plt.xlabel("X"); plt.ylabel("Y");
+  plt.title(title)
+  plt.show(False)
+  return fig, mesh
+
+
 class SkipperImage:
   def __init__(self, fname, extension=0):
     self.hdu=fits.open(fname)[extension]
@@ -119,16 +138,7 @@ class SkipperImage:
     self.compute_baseline()
     self.image_means-=self.baseline
     return True
-    
+
   def draw_image(self, cmap="spectral", *args,**kwargs):
     self.combine_skips()
-    plt.figure();
-    mesh=plt.pcolormesh(self.image_means-np.min(self.image_means),cmap=plt.get_cmap(cmap), norm=colors.LogNorm())
-    ax=mesh.axes
-    ax.set_aspect("equal")
-    ax.set_xlim(right=self.ncols/self.ndcms)
-    ax.set_ylim(top=self.nrows)
-    cbar=plt.colorbar()
-    cbar.set_label("ADU")
-    plt.xlabel("X"); plt.ylabel("Y");
-    plt.show(False)
+    plot_2d(self.image_means)
