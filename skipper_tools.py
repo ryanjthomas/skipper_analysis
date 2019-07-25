@@ -1,10 +1,13 @@
-from numpy import np
+import numpy as np
 from astropy.io import fits
+
+import matplotlib.pyplot as plt
+from matplotlib import colors
 
 class SkipperImage:
   def __init__(self, fname, extension=0):
     self.hdu=fits.open(fname)[extension]
-    self.header=hdu.header.copy()
+    self.header=self.hdu.header.copy()
     self.ndcms=self.header.get("NDCMS")
     self.nrows=self.header.get("NAXIS2")
     self.ncols=self.header.get("NAXIS1")
@@ -14,13 +17,14 @@ class SkipperImage:
 
     self.image_means=None
     self.image_rmses=None
+    self.baseline=None
     #Default parameters
     self.pre_skips=0
     self.post_skips=0
     self.invert=False
     self.nskips=self.ndcms
 
-  def set_params(nskips=None, pre_skips=None, post_skips=None, invert=None):
+  def set_params(self,nskips=None, pre_skips=None, post_skips=None, invert=None):
     '''
     Simple handler function to change parameters for handling the skipper image. Returns number of changed parameters.
     '''
@@ -46,38 +50,39 @@ class SkipperImage:
     if total_skips >= self.ndcms:
       print("Warning, trying to skip more skips than exist, reducing skipped skips...")
       #Reduced both proportional to the original setting
-      self.pre_skips=int(self.ndcms*self.pre_skips/(total_skips))-1
-      self.post_skips=int(self.ndcms*self.post_skips(total_skips))-1
+      self.pre_skips=int((self.ndcms-1)*self.pre_skips/(total_skips))
+      self.post_skips=int((self.ndcms-1)*self.post_skips/(total_skips))
       print("New pre_skips is: " + str(self.pre_skips) + ". New post_skips is: " +str(self.post_skips))
 
     return changed
     
-  def combine_skips(*args, **kwargs)
+  def combine_skips(self,force=False,*args, **kwargs):
     '''
     Creates an image from the raw skipper data, skipping the first "pre_skips" and last "post_skip" skips.
     '''
-    self.set_params(*args, **kwargs)
+    new_params=self.set_params(*args, **kwargs)
 
-    if self.pre_skips=pre_skips and self.post_skips=post_skips and self.image_means is not None:
-      return
+    if new_params==0 and self.image_means is not None and not force:
+      return False
+
+    means=np.zeros((self.nrows,self.ncols/self.ndcms))
+    rmses=np.zeros((self.nrows,self.ncols/self.ndcms))
 
     #Actually make the image
     for i in range(self.ncols/self.ndcms):
-      xslice=np.s_[i*self.ndcms+pre_skips:(i+1)*ndcms-post_skips]
-      means[:,i]=np.mean(data[:,xslice],axis=1)
-      rmses[:,i]=np.std(data[:,xslice],axis=1)
+      xslice=np.s_[i*self.ndcms+self.pre_skips:(i+1)*self.ndcms-self.post_skips]
+      means[:,i]=np.mean(self.data[:,xslice],axis=1)
+      rmses[:,i]=np.std(self.data[:,xslice],axis=1)
 
-    if invert:
+    if self.invert:
       means=-1*means
     #Store the result
     self.image_means=means
     self.image_rmses=rmses
-    self.pre_skips=pre_skips
-    self.post_skips=post_skips
-    self.invert=invert
-    return
+    
+    return True
 
-  def write_combined_fits(fname, *args, **kwargs)
+  def write_combined_fits(self,fname, *args, **kwargs):
     '''
     Write the combined skips to a .fits file.
     '''
@@ -87,13 +92,43 @@ class SkipperImage:
     header=self.header.copy()
     header["NAXIS1"]=self.ncols/self.ndcms
 
-    self.combine_skips(pre_skips, post_skips, invert)
+    self.combine_skips()
 
-    mean_hdu=fits.PrimaryHDU(self.means)
+    mean_hdu=fits.PrimaryHDU(self.image_means)
     mean_hdu.header=header
-    rms_hdu=fits.ImageHDU(self.rmses, header, "RMSES")
+    rms_hdu=fits.ImageHDU(self.image_rmses, header, "RMSES")
 
     hdul=fits.HDUList([mean_hdu, rms_hdu])
     hdul.writeto(fname,overwrite=False)
     
+  def compute_baseline(self, *args, **kwargs):
+    new_image=self.combine_skips(*args, **kwargs)
+
+    if self.baseline is not None and new_image is False:
+      return False
+    self.baseline=np.zeros(self.image_means.shape)
+
+    self.baseline_y=np.median(self.image_means, axis=1)
+    self.baseline[:,:]+=self.baseline_y[:,np.newaxis]
+    self.baseline_x=np.median(self.image_means-self.baseline, axis=0)
+    self.baseline[:,:]+=self.baseline_x[np.newaxis,:]
+    return True
+  
+  def subtract_baseline(self, *args, **kwargs):
+    new_image=self.combine_skips(*args, **kwargs)
+    self.compute_baseline()
+    self.image_means-=self.baseline
+    return True
     
+  def draw_image(self, cmap="spectral", *args,**kwargs):
+    self.combine_skips()
+    plt.figure();
+    mesh=plt.pcolormesh(self.image_means-np.min(self.image_means),cmap=plt.get_cmap(cmap), norm=colors.LogNorm())
+    ax=mesh.axes
+    ax.set_aspect("equal")
+    ax.set_xlim(right=self.ncols/self.ndcms)
+    ax.set_ylim(top=self.nrows)
+    cbar=plt.colorbar()
+    cbar.set_label("ADU")
+    plt.xlabel("X"); plt.ylabel("Y");
+    plt.show(False)
