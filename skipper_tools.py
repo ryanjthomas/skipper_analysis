@@ -25,7 +25,6 @@ def plot_2d(data,cmap="spectral",xlim=None, ylim=None, title=None, units="ADU"):
   plt.show(False)
   return fig, mesh
 
-
 class SkipperImage:
   def __init__(self, fname, extension=0):
     self.hdu=fits.open(fname)[extension]
