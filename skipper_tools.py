@@ -4,6 +4,9 @@ from astropy.io import fits
 import matplotlib.pyplot as plt
 from matplotlib import colors
 
+def mad(data):
+  return np.median(np.abs(data))
+
 def plot_2d(data,cmap="spectral",xlim=None, ylim=None, title=None, units="ADU"):
   data=np.array(data)
   fig=plt.figure()
@@ -37,12 +40,14 @@ class SkipperImage:
     self.image_means=None
     self.image_rmses=None
     self.baseline=None
+    self.charge_mask=None
     #Default parameters
     self.pre_skips=0
     self.post_skips=0
     self.invert=False
     self.nskips=self.ndcms
-
+    self.baseline_subtracted=False
+    
   def set_params(self,nskips=None, pre_skips=None, post_skips=None, invert=None):
     '''
     Simple handler function to change parameters for handling the skipper image. Returns number of changed parameters.
@@ -98,7 +103,8 @@ class SkipperImage:
     #Store the result
     self.image_means=means
     self.image_rmses=rmses
-    
+    self.baseline_subtracted=False
+
     return True
 
   def write_combined_fits(self,fname, *args, **kwargs):
@@ -137,8 +143,16 @@ class SkipperImage:
     new_image=self.combine_skips(*args, **kwargs)
     self.compute_baseline()
     self.image_means-=self.baseline
+    self.baseline_subtracted=True
     return True
 
   def draw_image(self, cmap="spectral", *args,**kwargs):
-    self.combine_skips()
+    self.combine_skips(*args, **kwargs)
     plot_2d(self.image_means)
+
+  def compute_charge_mask(self, *args, **kwargs):
+    self.compute_baseline(*args, **kwargs)
+    
+    if self.baseline_subtracted:
+      pass
+      
