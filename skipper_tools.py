@@ -4,13 +4,17 @@ from astropy.io import fits
 import matplotlib.pyplot as plt
 from matplotlib import colors
 
+from scipy.optimize import curve_fit
+
 def mad(data):
   return np.median(np.abs(data))
 
-def plot_2d(data,cmap="spectral",xlim=None, ylim=None, title=None, units="ADU"):
+
+def plot_2d(data,cmap="spectral",xlim=None, ylim=None, title=None, units="ADU", vmin=-50, vmax=None):
   data=np.array(data)
   fig=plt.figure()
-  mesh=plt.pcolormesh(data-np.min(data),cmap=plt.get_cmap(cmap), norm=colors.LogNorm())
+  # mesh=plt.pcolormesh(data-np.min(data),cmap=plt.get_cmap(cmap), norm=colors.LogNorm())
+  mesh=plt.pcolormesh(data,cmap=plt.get_cmap(cmap), norm=colors.SymLogNorm(10, vmin=vmin, vmax=vmax))
     
   ax=mesh.axes
   ax.set_aspect("equal")
@@ -24,6 +28,27 @@ def plot_2d(data,cmap="spectral",xlim=None, ylim=None, title=None, units="ADU"):
   plt.title(title)
   plt.show(False)
   return fig, mesh
+
+#For fitting
+def gauss(x, A,mu, sigma):
+    return A*np.exp(-(x-mu)**2/(2.*sigma**2))
+
+def fit_func(func, data, nbins=5000, plot_fit=False):
+  '''
+  Simple wrapper function to perform binned fit of data to func.
+  '''
+  hist, bin_edges=np.histogram(data, density=True, bins=nbins)
+  bin_centres = (bin_edges[:-1] + bin_edges[1:])/2
+  coeff, var_matrix = curve_fit(func, bin_centres, hist)
+  
+  if plot_fit:
+    hist_fit = func(bin_centres, *coeff)
+    plt.figure()
+    plt.plot(bin_centres, hist, label="Data")
+    plt.plot(bin_centres, hist_fit, label="Fit")
+    plt.show(False)
+
+  return coeff, var_matrix
 
 class SkipperImage:
   def __init__(self, fname, extension=0):
@@ -126,21 +151,29 @@ class SkipperImage:
     hdul.writeto(fname,overwrite=False)
     
   def compute_baseline(self, *args, **kwargs):
+    '''
+    Computes the baseline for the CCD image, as the median value along each row and column. Also forms the baseline per pixel as the sum of the baselines in x and y.
+    '''
     new_image=self.combine_skips(*args, **kwargs)
 
-    if self.baseline is not None and new_image is False:
+    if self.baseline is not None and not new_image:
       return False
     self.baseline=np.zeros(self.image_means.shape)
 
-    self.baseline_y=np.median(self.image_means, axis=1)
-    self.baseline[:,:]+=self.baseline_y[:,np.newaxis]
     self.baseline_x=np.median(self.image_means-self.baseline, axis=0)
     self.baseline[:,:]+=self.baseline_x[np.newaxis,:]
+    self.baseline_y=np.median(self.image_means-self.baseline, axis=1)
+    self.baseline[:,:]+=self.baseline_y[:,np.newaxis]
     return True
   
   def subtract_baseline(self, *args, **kwargs):
+    '''
+    Subtracts baseline from the image. Computes the baseline and skipper means, if not already done.
+    '''
     new_image=self.combine_skips(*args, **kwargs)
-    self.compute_baseline()
+    if self.baseline_subtracted and not new_image:
+      return False
+    self.compute_baseline(*args, **kwargs)
     self.image_means-=self.baseline
     self.baseline_subtracted=True
     return True
@@ -150,8 +183,24 @@ class SkipperImage:
     plot_2d(self.image_means)
 
   def compute_charge_mask(self, *args, **kwargs):
+    '''
+    Not implemented
+    '''
     self.compute_baseline(*args, **kwargs)
     
     if self.baseline_subtracted:
       pass
       
+  
+  def compute_noise(self,nbins=5000, plot_fit=False,*args, **kwargs):
+    '''
+    Performs a binned fit to the data to estimate the pixel noise of the CCD image
+    '''
+
+    self.combine_skips(*args, **kwargs)
+
+    #    npix=self.image_means.shape[0]*self.image_means.shape[1]
+    emax=np.percentile(self.image_means,50)*2
+    coeff, var_matrix=fit_func(gauss,self.image_means, nbins=5000, plot_fit=plot_fit)
+    return coeff, var_matrix
+
