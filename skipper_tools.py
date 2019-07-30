@@ -10,7 +10,7 @@ def mad(data):
   return np.median(np.abs(data))
 
 
-def plot_2d(data,cmap="spectral",xlim=None, ylim=None, title=None, units="ADU", vmin=-50, vmax=None):
+def plot_2d(data,cmap="rainbow",xlim=None, ylim=None, title=None, units="ADU", vmin=-50, vmax=None):
   data=np.array(data)
   fig=plt.figure()
   # mesh=plt.pcolormesh(data-np.min(data),cmap=plt.get_cmap(cmap), norm=colors.LogNorm())
@@ -57,6 +57,7 @@ class SkipperImage:
     self.ndcms=self.header.get("NDCMS")
     self.nrows=self.header.get("NAXIS2")
     self.ncols=self.header.get("NAXIS1")
+    self.ncols_phys=int(self.ncols/self.ndcms)
     self.data=self.hdu.data
     #Total exposure time in seconds
     self.exptot=self.header.get("MEXP")/1000+self.header.get("MREAD")/1000
@@ -113,11 +114,11 @@ class SkipperImage:
     if new_params==0 and self.image_means is not None and not force:
       return False
 
-    means=np.zeros((self.nrows,self.ncols/self.ndcms))
-    rmses=np.zeros((self.nrows,self.ncols/self.ndcms))
+    means=np.zeros((self.nrows,self.ncols_phys))
+    rmses=np.zeros((self.nrows,self.ncols_phys))
 
     #Actually make the image
-    for i in range(self.ncols/self.ndcms):
+    for i in range(self.ncols_phys):
       xslice=np.s_[i*self.ndcms+self.pre_skips:(i+1)*self.ndcms-self.post_skips]
       means[:,i]=np.mean(self.data[:,xslice],axis=1)
       rmses[:,i]=np.std(self.data[:,xslice],axis=1)
