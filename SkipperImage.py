@@ -66,14 +66,22 @@ class SkipperImage:
     self.image_rmses=None
     self.baseline=None
     self.charge_mask=None
+
     #Default parameters
     self.pre_skips=0
     self.post_skips=0
     self.invert=False
+
+    #Derived values
     self.nskips=self.ndcms
     self.baseline_subtracted=False
+    self.noise=None
+    self.sigma_coeffs=None
+    self.sigma_errs=None
+    self.gen_charge
+    self.image_gen_charge
     
-  def set_params(self,nskips=None, pre_skips=None, post_skips=None, invert=None):
+  def set_params(self,nskips=None, pre_skips=None, post_skips=None, invert=None, *args, **kwars):
     '''
     Simple handler function to change parameters for handling the skipper image. Returns number of changed parameters.
     '''
@@ -198,10 +206,38 @@ class SkipperImage:
     Performs a binned fit to the data to estimate the pixel noise of the CCD image
     '''
 
-    self.combine_skips(*args, **kwargs)
-
-    #    npix=self.image_means.shape[0]*self.image_means.shape[1]
-    emax=np.percentile(self.image_means,50)*2
+    #self.combine_skips(*args, **kwargs)
+    #Need to subtract the baseline for the fit to work properly
+    #TODO: fix that so this doesn't need to be done (maybe split left/right sides of image? Estimate mu?)
+    self.subtract_baseline()
     coeff, var_matrix=fit_func(gauss,self.image_means, nbins=5000, plot_fit=plot_fit)
+
+    self.noise=coeff[2]
+    self.sigma_coeffs=coeff
+    self.sigma_errs=var_matrix
+
     return coeff, var_matrix
 
+  def compute_gen_charge(self, *args, **kwars):
+    '''
+    Estimates the amount of spurious charge generated in each pixel from the skipping procedure
+    '''
+    self.set_params(args, kwargs)
+    self.image_gen_charge=np.zeros((self.nrows, self.ncols_phys))
+    #TODO: reimplement this using slices to eliminate the loop
+    for i in range(self.ncols_phys):
+      x1=i*self.ndcms+self.pre_skips
+      x2=(i+1)*self.ndcms-self.post_skips
+      self.image_gen_charge[:,i]=self.data[:,x2]-self.data[:,x1]
+    self.gen_charge=np.mean(self.image_gen_charge)
+    return self.gen_charge
+
+  def compute_charge_loss(*args, **kwargs):
+    self.set_params(*args, **kwargs)
+    
+  
+  def compute_statistics(self, *args, **kwargs):
+    self.combine_skips(*args, **kwargs)
+    self.compute_gen_charge(*args, **kwargs)
+    self.compute_charge_loss(*args, **kwargs)
+    
