@@ -78,8 +78,8 @@ class SkipperImage:
     self.noise=None
     self.sigma_coeffs=None
     self.sigma_errs=None
-    self.gen_charge
-    self.image_gen_charge
+    self.gen_charge=None
+    self.image_gen_charge=None
     
   def set_params(self,nskips=None, pre_skips=None, post_skips=None, invert=None, *args, **kwars):
     '''
@@ -157,7 +157,7 @@ class SkipperImage:
     rms_hdu=fits.ImageHDU(self.image_rmses, header, "RMSES")
 
     hdul=fits.HDUList([mean_hdu, rms_hdu])
-    hdul.writeto(fname,overwrite=False)
+    hdul.writeto(fname,clobber=False)
     
   def compute_baseline(self, *args, **kwargs):
     '''
