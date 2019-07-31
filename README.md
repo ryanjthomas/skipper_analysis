@@ -1,6 +1,6 @@
 # Skipper Analysis
 
-A set of analysis tools written mainly in Python for analyzing data taken using skipper CCDs.
+A set of analysis tools written mainly in Python for analyzing data taken using skipper CCDs. Note: this tool is under very active development, use at your own risk.
 
 ### Prerequisites
 

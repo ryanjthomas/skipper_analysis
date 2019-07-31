@@ -43,14 +43,31 @@ def fit_func(func, data, nbins=5000, plot_fit=False):
   
   if plot_fit:
     hist_fit = func(bin_centres, *coeff)
-    plt.figure()
+    fig=plt.figure()
     plt.plot(bin_centres, hist, label="Data")
     plt.plot(bin_centres, hist_fit, label="Fit")
     plt.show(False)
 
-  return coeff, var_matrix
+  if plot_fit:
+    return coeff, var_matrix, fig
+  else:
+    return coeff, var_matrix
 
 class SkipperImage:
+  def _reset_derived(self):
+    self.image_means=None
+    self.image_rmses=None
+    self.baseline=None
+    self.charge_mask=None
+    
+    self.baseline_subtracted=False
+    self.noise=None
+    self.noise_coeffs=None
+    self.noise_errs=None
+    self.gen_charge=None
+    self.image_gen_charge=None
+    return True
+    
   def __init__(self, fname, extension=0):
     self.hdu=fits.open(fname)[extension]
     self.header=self.hdu.header.copy()
@@ -61,32 +78,22 @@ class SkipperImage:
     self.data=self.hdu.data
     #Total exposure time in seconds
     self.exptot=self.header.get("MEXP")/1000+self.header.get("MREAD")/1000
-
-    self.image_means=None
-    self.image_rmses=None
-    self.baseline=None
-    self.charge_mask=None
-
+    self.nskips=self.ndcms
     #Default parameters
     self.pre_skips=0
     self.post_skips=0
     self.invert=False
 
-    #Derived values
-    self.nskips=self.ndcms
-    self.baseline_subtracted=False
-    self.noise=None
-    self.sigma_coeffs=None
-    self.sigma_errs=None
-    self.gen_charge=None
-    self.image_gen_charge=None
+    #Derived values    
+    self._reset_derived()
+
+    self.figures=[]
     
   def set_params(self,nskips=None, pre_skips=None, post_skips=None, invert=None, *args, **kwars):
     '''
     Simple handler function to change parameters for handling the skipper image. Returns number of changed parameters.
     '''
-    changed=0
-    
+    changed=0    
     if nskips is not None and nskips > 0 and nskips != self.nskips:
       self.nskips=nskips
       changed+=1
@@ -111,6 +118,11 @@ class SkipperImage:
       self.post_skips=int((self.ndcms-1)*self.post_skips/(total_skips))
       print("New pre_skips is: " + str(self.pre_skips) + ". New post_skips is: " +str(self.post_skips))
 
+
+    if changed>0:
+      #All our old computed values become useless, so clear them out
+      self._reset_derived()
+      
     return changed
     
   def combine_skips(self,force=False,*args, **kwargs):
@@ -187,7 +199,8 @@ class SkipperImage:
 
   def draw_image(self, cmap="spectral", *args,**kwargs):
     self.combine_skips(*args, **kwargs)
-    plot_2d(self.image_means)
+    fig, mesh=plot_2d(self.image_means)
+    self.figures.append(fig)
 
   def compute_charge_mask(self, *args, **kwargs):
     '''
@@ -208,11 +221,14 @@ class SkipperImage:
     #Need to subtract the baseline for the fit to work properly
     #TODO: fix that so this doesn't need to be done (maybe split left/right sides of image? Estimate mu?)
     self.subtract_baseline(*args, **kwargs)
-    coeff, var_matrix=fit_func(gauss,self.image_means, nbins=5000, plot_fit=plot_fit)
-
+    fit_results=fit_func(gauss,self.image_means, nbins=nbins, plot_fit=plot_fit)
+    coeff=fit_results[0]
+    var_matrix=fit_results[1]
+    if plot_fit:
+      self.figures.append(fit_results[2])
     self.noise=coeff[2]
-    self.sigma_coeffs=coeff
-    self.sigma_errs=var_matrix
+    self.noise_coeffs=coeff
+    self.noise_errs=var_matrix
 
     return coeff, var_matrix
 
