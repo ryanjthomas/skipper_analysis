@@ -145,12 +145,10 @@ class SkipperImage:
     Write the combined skips to a .fits file.
     '''
 
-    self.set_params(*args, **kwargs)
-    
     header=self.header.copy()
     header["NAXIS1"]=self.ncols/self.ndcms
 
-    self.combine_skips()
+    self.combine_skips(*args,**kwargs)
 
     mean_hdu=fits.PrimaryHDU(self.image_means)
     mean_hdu.header=header
@@ -209,7 +207,7 @@ class SkipperImage:
     #self.combine_skips(*args, **kwargs)
     #Need to subtract the baseline for the fit to work properly
     #TODO: fix that so this doesn't need to be done (maybe split left/right sides of image? Estimate mu?)
-    self.subtract_baseline()
+    self.subtract_baseline(*args, **kwargs)
     coeff, var_matrix=fit_func(gauss,self.image_means, nbins=5000, plot_fit=plot_fit)
 
     self.noise=coeff[2]
@@ -234,8 +232,7 @@ class SkipperImage:
 
   def compute_charge_loss(*args, **kwargs):
     self.set_params(*args, **kwargs)
-    
-  
+      
   def compute_statistics(self, *args, **kwargs):
     self.combine_skips(*args, **kwargs)
     self.compute_gen_charge(*args, **kwargs)
