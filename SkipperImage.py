@@ -177,10 +177,10 @@ class SkipperImage:
     '''
     Subtracts baseline from the image. Computes the baseline and skipper means, if not already done.
     '''
-    new_image=self.combine_skips(*args, **kwargs)
+    new_image=self.compute_baseline(*args, **kwargs)
     if self.baseline_subtracted and not new_image:
       return False
-    self.compute_baseline(*args, **kwargs)
+
     self.image_means-=self.baseline
     self.baseline_subtracted=True
     return True
