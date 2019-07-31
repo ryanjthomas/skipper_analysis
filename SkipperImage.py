@@ -218,7 +218,7 @@ class SkipperImage:
 
     return coeff, var_matrix
 
-  def compute_gen_charge(self, *args, **kwars):
+  def compute_gen_charge(self, *args, **kwargs):
     '''
     Estimates the amount of spurious charge generated in each pixel from the skipping procedure
     '''
@@ -227,9 +227,9 @@ class SkipperImage:
     #TODO: reimplement this using slices to eliminate the loop
     for i in range(self.ncols_phys):
       x1=i*self.ndcms+self.pre_skips
-      x2=(i+1)*self.ndcms-self.post_skips
+      x2=(i+1)*self.ndcms-self.post_skips-1
       self.image_gen_charge[:,i]=self.data[:,x2]-self.data[:,x1]
-    self.gen_charge=np.mean(self.image_gen_charge)
+    self.gen_charge=np.median(self.image_gen_charge)
     return self.gen_charge
 
   def compute_charge_loss(*args, **kwargs):
