@@ -222,7 +222,7 @@ class SkipperImage:
     '''
     Estimates the amount of spurious charge generated in each pixel from the skipping procedure
     '''
-    self.set_params(args, kwargs)
+    self.set_params(*args, *kwargs)
     self.image_gen_charge=np.zeros((self.nrows, self.ncols_phys))
     #TODO: reimplement this using slices to eliminate the loop
     for i in range(self.ncols_phys):
