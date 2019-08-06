@@ -4,6 +4,7 @@
 
 import sys
 import re
+import numpy as np
 pyver=sys.version_info[0]
 
 if pyver==2:
@@ -11,7 +12,7 @@ if pyver==2:
 if pyver==3:
   from configparser import ConfigParser
 
-import matplotlib.pyplot as plot
+import matplotlib.pyplot as plt
   
 #Units
 ns=1.0
@@ -41,7 +42,7 @@ class Lengths:
     for line in sequencer:
       if re.match(len_str,line.lstrip()):
         self.len_strs.append(len_str)
-        self.lengths.append(hex_to_time(re.search('\d\d', line).group()))
+        self.lengths.append(hex_to_time(re.search('[0-9a-fA-F][0-9a-fA-F]', line).group()))
         return
 
     print("Warning, delay " + len_str + " not found")
@@ -83,17 +84,21 @@ class Clock:
       return self.curr_val
 
 class Sequence:
-  def __init__(self, name, start_str, end_str, clocks, lengths,time_step=10*ns, valid_cmds=["VIDEO", "CLK2","CLK3"]):
+  def __init__(self, name, start_str, end_str, clocks, lengths,time_step=10*ns, valid_cmds=["VIDEO", "CLK2","CLK3"], sequencer=None):
     self.name=name
     self.start_str=start_str
     self.clocks=clocks
     self.end_str=end_str
     self.time_step=time_step
     self.clock_seq=[]
+    self.time_seq=[]
     self.lengths=lengths
     self.valid_cmds=valid_cmds
+    if sequencer is not None:
+      self.parse_seq(sequencer)
     
   def parse_seq(self, seq):
+    self.clock_seq=[]
     #Find the starting location
     start_line=-1
     for i,line in enumerate(seq):
@@ -119,13 +124,29 @@ class Sequence:
 
       for j in range(steps):
         step=[]
-        for clock in clocks:
+        for clock in self.clocks:
           step.append(clock.curr_val)
-        self.clock_seq.append(step)        
-
+        self.clock_seq.append(step)
+    #Cast to a numpy array to make it easier to work with
+    self.clock_seq=np.array(self.clock_seq)
+    self.time_seq=np.arange(len(self.clock_seq))*self.time_step/us
+  
   def plot(self):
     plt.figure()
-    
+    nplots=0
+    for clock in self.clocks:
+      if clock.show:
+        nplots+=1
+        
+    currplot=1
+    for i,clock in enumerate(self.clocks):
+      if clock.show:
+        plt.subplot(nplots,1,currplot, label=clock.name)
+        plt.plot(self.time_seq, self.clock_seq[:,i], label=clock.name)
+        plt.ylabel(clock.name)
+
+        currplot+=1
+    plt.xlabel("Time (us)")
 
         
 if __name__=="__main__":
@@ -147,28 +168,35 @@ if __name__=="__main__":
 
     
   lengths=Lengths()
-  lengths.add_length("P_DELAY", 0.1*us)
+  lengths.parse_length("P_DELAY", sequencer)
   
-  clocks=[]
-  v1U=Clock("V1","TwoV1H", "TwoV1L",vhi, vlo)
-  v2U=Clock("V2","TwoV2H", "TwoV2L",vhi, vlo)
-  v3U=Clock("V3","TwoV3H", "TwoV3L",vhi, vlo)
 
-  v1L=Clock("V1","OneV1H", "OneV1L",vhi, vlo)
-  v2L=Clock("V2","OneV2H", "OneV2L",vhi, vlo)
-  v3L=Clock("V3","OneV3H", "OneV3L",vhi, vlo)
+  v12=Clock("V1_2","TwoV1H", "TwoV1L",vhi, vlo)
+  v22=Clock("V2_2","TwoV2H", "TwoV2L",vhi, vlo)
+  v32=Clock("V3_2","TwoV3H", "TwoV3L",vhi, vlo)
+  tg2=Clock("TG_2","TwoTH", "TwoTL",vhi, vlo)
   
-  clocks.append(v1U)
-  clocks.append(v2U)
-  clocks.append(v3U)
+  v11=Clock("V1_1","OneV1H", "OneV1L",vhi, vlo)
+  v21=Clock("V2_1","OneV2H", "OneV2L",vhi, vlo)
+  v31=Clock("V3_1","OneV3H", "OneV3L",vhi, vlo)
+  tg1=Clock("TG_1","OneTH", "OneTL",vhi, vlo)
 
-  clocks.append(v1L)
-  clocks.append(v2L)
-  clocks.append(v3L)
+  vclocks=[]
+  vclocks.append(v11)
+  vclocks.append(v21)
+  vclocks.append(v31)
+  vclocks.append(tg1)
   
-  seq_v1=Sequence("Vertical","PARALLEL_1","PARALLEL_2",clocks, lengths)
+  vclocks.append(v12)
+  vclocks.append(v22)
+  vclocks.append(v32)
+  vclocks.append(tg2)
+  
+  seq_v1=Sequence("Vertical 1","PARALLEL_1","PARALLEL_2",vclocks, lengths, sequencer=sequencer)
+  seq_v2=Sequence("Vertical 2","PARALLEL_2","PARALLEL_12",vclocks, lengths, sequencer=sequencer)
+  seq_v12=Sequence("Vertical 12","PARALLEL_12","END_PARALLEL",vclocks, lengths, sequencer=sequencer)
+  
 
-  seq_v1.parse_seq(sequencer) 
-
+  
 
   
