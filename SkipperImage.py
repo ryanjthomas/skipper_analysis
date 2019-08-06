@@ -1,16 +1,42 @@
 import numpy as np
 from astropy.io import fits
 
-import matplotlib.pyplot as plt
-from matplotlib import colors
+try:
+  import matplotlib.pyplot as plt
+  from matplotlib import colors
+  mpl=True
+except:
+  print("Warning: matplotlib not found, plotting will not work...")
+  mpl=False
 
-from scipy.optimize import curve_fit
+fitter=None
+fitters=[]  
+#Had issues getting iminuit to work, curve_fit works fine for now
+try:
+  import iminuit
+  import probfit
+  fitter="iminuit"
+  fitters.append("iminuit")
+  print("Using iminuit as fitter")
+except:
+  pass
+try:
+  from scipy.optimize import curve_fit
+  if fitter is None:
+    print("Iminuit not found, using scipy as fitter...")
+    fitter="scipy"
+    fitters.append("scipy")
+except:
+    print("Warning, no fitter found, cannot fit to noise...")
+
 
 def mad(data):
-  return np.median(np.abs(data))
+  return np.median(np.abs(data-np.median(data)))
 
 
 def plot_2d(data,cmap="rainbow",xlim=None, ylim=None, title=None, units="ADU", vmin=-50, vmax=None):
+  if not mpl:
+    return None, None
   data=np.array(data)
   fig=plt.figure()
   # mesh=plt.pcolormesh(data-np.min(data),cmap=plt.get_cmap(cmap), norm=colors.LogNorm())
@@ -30,29 +56,86 @@ def plot_2d(data,cmap="rainbow",xlim=None, ylim=None, title=None, units="ADU", v
   return fig, mesh
 
 #For fitting
-def gauss(x, A,mu, sigma):
-    return A*np.exp(-(x-mu)**2/(2.*sigma**2))
+def gauss(x, norm,mean, sigma):
+  return norm*np.exp(-(x-mean)**2/(2.*sigma**2))
 
-def fit_func(func, data, nbins=5000, plot_fit=False):
-  '''
-  Simple wrapper function to perform binned fit of data to func.
-  '''
-  hist, bin_edges=np.histogram(data, density=True, bins=nbins)
-  bin_centres = (bin_edges[:-1] + bin_edges[1:])/2
-  coeff, var_matrix = curve_fit(func, bin_centres, hist)
+#For fitting
+def gauss_norm(x, mean, sigma):
+  return 1./(sigma*(2*np.pi)**.5)*np.exp(-(x-mean)**2/(2.*sigma**2))
+
   
-  if plot_fit:
-    hist_fit = func(bin_centres, *coeff)
-    fig=plt.figure()
-    plt.plot(bin_centres, hist, label="Data")
-    plt.plot(bin_centres, hist_fit, label="Fit")
-    plt.show(False)
+def fit_gauss(data, nbins=None, plot_fit=False, fitter=fitter, fit_range=None, rms_range_factor=8, *args, **kwargs):
+  '''
+  Wrapper function to perform binned fit of data to func. If given, will fit in the range "fit_range" (should be a tuple/array if [min,max]). Otherwise fits in the range median-rms_range_factor*MAD.
+  '''
+  if len(fitters) < 1:
+    print("Error, no valid fitters loaded, exiting...")
+    return None, None
+  #Guess for initial parameters and to get a reasonable fitting range
+  mean_guess=np.median(data)
+  rms_guess=mad(data)
+  if fit_range is None:
+    fit_range=[mean_guess-rms_guess*rms_range_factor, mean_guess+rms_guess*rms_range_factor]
+  fit_data=data[(data > fit_range[0]) & (data < fit_range[1])]
 
-  if plot_fit:
-    return coeff, var_matrix, fig
+  #Get a reasonable number of bins
+  if nbins is None:
+    nbins=int((fit_range[1]-fit_range[0])/2)
+    print("Bins for fit: " + str(nbins))
+    if nbins < 40:
+      print("Warning, number of bins is fairly small, fit may not be good...")
+
+  if fitter not in fitters:
+    print("Error, selected fitter is not loaded, loading another fitter")
+    fitter=fitters[0]
+      
+  if fitter=="scipy":
+    hist, bin_edges=np.histogram(fit_data, density=True, bins=nbins)
+    bin_centres = (bin_edges[:-1] + bin_edges[1:])/2
+    coeff, var_matrix = curve_fit(gauss, bin_centres, hist)
+  
+    if plot_fit and mpl:
+      hist_fit = gauss(bin_centres, *coeff)
+      fig=plt.figure()
+      plt.plot(bin_centres, hist, label="Data")
+      plt.plot(bin_centres, hist_fit, label="Fit")
+      plt.show(False)
+    #To keep compatibility between scipy fitter (which requires norm parameter A) and iminuit (which does not),
+    #don't return the normalization coeff.
+    coeff=coeff[1:]
+    var_matrix=var_matrix[1:,1:]
+    if plot_fit:
+      return coeff, var_matrix, fig
+    else:
+      return coeff, var_matrix
+
+  elif fitter=="iminuit":
+    #ext_gauss=probfit.Extended(probfit.gaussian)
+    #likelihood=probfit.BinnedLH(ext_gauss, fit_data,bins=nbins, extended=True)#, extended_bound=(-1000,1000))
+    likelihood=probfit.BinnedLH(probfit.gaussian, fit_data,bins=nbins)#, extended_bound=(-1000,1000))
+    #likelihood=probfit.UnbinnedLH(probfit.gaussian, fit_data, extended=False)
+    minuit = iminuit.Minuit(likelihood,mean=mean_guess,sigma=rms_guess, print_level=1)
+    minuit.migrad()
+    #      minuit.minos()
+    if plot_fit:
+      fig=plt.figure()
+      likelihood.draw(minuit)
+    #Probably a better way to handle this
+    coeff=[]
+    coeff.append(minuit.values[0])
+    coeff.append(minuit.values[1])
+    var_matrix=[]
+    var_matrix.append(minuit.matrix()[0])
+    var_matrix.append(minuit.matrix()[1])
+#    var_matrix.append(minuit.matrix()[2])
+    if plot_fit:
+      return coeff, var_matrix, fig
+    else:
+      return coeff, var_matrix
   else:
-    return coeff, var_matrix
-
+    print("Error, fitter not valid, exiting without doing fit...")
+    return None, None
+    
 class SkipperImage:
   def _reset_derived(self):
     self.image_means=None
@@ -75,6 +158,7 @@ class SkipperImage:
     self.nrows=self.header.get("NAXIS2")
     self.ncols=self.header.get("NAXIS1")
     self.ncols_phys=int(self.ncols/self.ndcms)
+    self.npix=self.nrows*self.ncols_phys
     self.data=self.hdu.data
     #Total exposure time in seconds
     self.exptot=self.header.get("MEXP")/1000+self.header.get("MREAD")/1000
@@ -125,13 +209,13 @@ class SkipperImage:
       
     return changed
     
-  def combine_skips(self,force=False,*args, **kwargs):
+  def combine_skips(self,recompute=False,*args, **kwargs):
     '''
     Creates an image from the raw skipper data, skipping the first "pre_skips" and last "post_skip" skips.
     '''
     new_params=self.set_params(*args, **kwargs)
 
-    if new_params==0 and self.image_means is not None and not force:
+    if new_params==0 and self.image_means is not None and not recompute:
       return False
 
     means=np.zeros((self.nrows,self.ncols_phys))
@@ -198,10 +282,18 @@ class SkipperImage:
     return True
 
   def draw_image(self, cmap="spectral", *args,**kwargs):
+    '''
+    Function to draw the image after combining skips.
+    '''
+    if not mpl:
+      print("Error, matplotlib not found, cannot draw image...")
+      return False
+
     self.combine_skips(*args, **kwargs)
     fig, mesh=plot_2d(self.image_means)
     self.figures.append(fig)
-
+    return True
+    
   def compute_charge_mask(self, *args, **kwargs):
     '''
     Not implemented
@@ -212,7 +304,7 @@ class SkipperImage:
       pass
       
   
-  def compute_noise(self,nbins=5000, plot_fit=False,*args, **kwargs):
+  def compute_noise(self,nbins=None, plot_fit=False,*args, **kwargs):
     '''
     Performs a binned fit to the data to estimate the pixel noise of the CCD image
     '''
@@ -221,12 +313,14 @@ class SkipperImage:
     #Need to subtract the baseline for the fit to work properly
     #TODO: fix that so this doesn't need to be done (maybe split left/right sides of image? Estimate mu?)
     self.subtract_baseline(*args, **kwargs)
-    fit_results=fit_func(gauss,self.image_means, nbins=nbins, plot_fit=plot_fit)
+    plot_fit=plot_fit and mpl
+
+    fit_results=fit_gauss(self.image_means.flatten(), nbins=nbins, plot_fit=plot_fit, *args, **kwargs)
     coeff=fit_results[0]
     var_matrix=fit_results[1]
     if plot_fit:
       self.figures.append(fit_results[2])
-    self.noise=coeff[2]
+    self.noise=coeff[-1]
     self.noise_coeffs=coeff
     self.noise_errs=var_matrix
 
