@@ -168,15 +168,17 @@ class Sequence:
         self.clock_seq.append(step)
     #Cast to a numpy array to make it easier to work with
     self.clock_seq=np.array(self.clock_seq)
-    #Now filter the clocks using our RC time constants
+    #Filter our clock sequence through the low-pass filter
+    self.filter_clocks()
+    self.time_seq=np.arange(len(self.clock_seq))*self.time_step
+
+  def filter_clocks(self):
     fclocks=[]
     for i,clock in enumerate(self.clock_seq.T):
       fclocks.append(lowpass_filter(clock, self.clocks[i].RC, self.time_step))
     fclocks=np.array(fclocks)
     self.clock_seq_filtered=fclocks.T
-                     
-    self.time_seq=np.arange(len(self.clock_seq))*self.time_step
-
+        
   def show(self, *args, **kwargs):
     self.plot(*args, **kwargs)
     
@@ -226,15 +228,20 @@ class Sequence:
     #First check our clocks are the same
     if self.clocks!=b.clocks:
       raise ValueError("Cannot add sequences with different sets of clocks")
+    if self.time_step!=b.time_step:
+      #TODO: somehow adapt time steps of different sequencers to work together
+      #For now just don't combine sequencers with different time steps (no reason to anyways)
+      print("Warning, time steps of sequences are not equal, filtered clocks will not be correct...")
     newseq=copy.copy(self)
     newseq.clock_seq=np.append(self.clock_seq, b.clock_seq,axis=0)
-    newseq.clock_seq_filtered=np.append(self.clock_seq_filtered, b.clock_seq_filtered,axis=0)
+    #This needs to be regenerated to properly stich together clock transitions
+    #    newseq.clock_seq_filtered=np.append(self.clock_seq_filtered, b.clock_seq_filtered,axis=0)
     newseq.time_seq=np.append(self.time_seq, b.time_seq+self.time_seq[-1],axis=0)
     newseq.name=self.name+"+"+b.name
     #These no longer make sense
     newseq.start_str=None
     newseq.end_str=None
-    newseq.time_step=None
+    newseq.filter_clocks()
     return newseq
     
 if __name__=="__main__":
