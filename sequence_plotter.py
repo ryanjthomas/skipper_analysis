@@ -1,6 +1,4 @@
-#!/usr/bin/python
-
-
+#!/usr/bin/ipython -i
 
 import sys
 import re
@@ -17,9 +15,16 @@ if pyver==3:
 import matplotlib.pyplot as plt
 from scipy.signal import butter, lfilter, lfilter_zi
 
+#I like interactive plotting
+plt.ion()
 #Units
 ns=1.0
 us=1000*ns
+
+#RC constants for our clocks
+RC_vclock = 2.35*us
+RC_hclock = 33*ns
+RC_sclock = 100*ns  
 
 instr_length=40*ns
 
@@ -233,11 +238,15 @@ class Sequence:
     return newseq
     
 if __name__=="__main__":
-  #RC constants for our clocks
-  RC_vclock = 2.35*us
-  RC_hclock = 33*ns
-  RC_sclock = 100*ns
-  
+  if len(sys.argv)>1:
+    cfname=sys.argv[1]
+  else:
+    cfname="Config.ini"
+  if len(sys.argv)>2:
+    sfname=sys.argv[2]
+  else:
+    sfname="pit_super_sequencer_UW2.waveforms"
+    
   if pyver==3:
     config=ConfigParser(inline_comment_prefixes=";")
   else:
@@ -307,35 +316,33 @@ if __name__=="__main__":
   hl2=Clock("HL2","HL2H", "HL2L","l_hclock_hi","l_hclock_lo",config=config, RC=RC_hclock)
   hl1=Clock("HL1","HL1H", "HL1L","l_hclock_hi","l_hclock_lo",config=config, RC=RC_hclock)
 
-  hclocks=[]
-
-  hclocks.append(hu1)
-  hclocks.append(hu2)
-  hclocks.append(hu3)
-
-  hclocks.append(hl1)
-  hclocks.append(hl2)
-  hclocks.append(hl3)
+  hclocks=[hu1,hu2,hu3,hl1,hl2,hl3]
 
   seq_hl=Sequence("Read L", "SERIAL_READ_L_STAGE1","END_SERIAL_READ_L_STAGE1", hclocks, lengths, sequencer=sequencer)
   seq_hu=Sequence("Read U", "SERIAL_READ_R_STAGE1","END_SERIAL_READ_R_STAGE1", hclocks, lengths, sequencer=sequencer)
   seq_hul=Sequence("Read UL", "SERIAL_READ_LR_STAGE1","END_SERIAL_READ_LR_STAGE1", hclocks, lengths, sequencer=sequencer)
   
-  rg=Clock("RG","RH", "RL","rg_hi","rg_lo",config=config, RC=RC_sclock)
-  og=Clock("OG","OUTGH", "OUTGL","og_hi","og_lo",config=config, RC=RC_sclock)
-  sw=Clock("SW","WH", "WL","sw_hi","sw_lo",config=config, RC=RC_sclock)
-  dg=Clock("DG","DUMPGH","DUMPGL", "dg_hi","dg_lo", config=config, RC=RC_hclock)
+  rg=Clock("RG","RH", "RL","rg_hi","rg_lo",config=config, RC=RC_sclock,color="blue")
+  og=Clock("OG","OUTGH", "OUTGL","og_hi","og_lo",config=config, RC=RC_sclock,color="magenta")
+  sw=Clock("SW","WH", "WL","sw_hi","sw_lo",config=config, RC=RC_sclock,color="red")
+  dg=Clock("DG","DUMPGH","DUMPGL", "dg_hi","dg_lo", config=config, RC=RC_hclock,color="cyan")
 
-  sclocks=[]
-  sclocks.append(rg)
-  sclocks.append(og)
-  sclocks.append(sw)
-  sclocks.append(hu3)
-  sclocks.append(dg)
+  sclocks=[hu3,rg,og,sw,dg]
   
   seq_skip=Sequence("Skipper Read","PIT_SK_NDCR_SERIAL_READ","END_PIT_SK_NDCR_SERIAL_READ",
                     sclocks, lengths, sequencer=sequencer)
 
   seq_clrchrg=Sequence("Clear Charge","SERIAL_READ_CLRCHG_STAGE_2","END_SERIAL_READ_CLRCHG_STAGE_2",
                        sclocks, lengths, sequencer=sequencer)
-  
+
+  allhclocks=[hu1,hu2,hu3,hl1,hl2,hl3,sw,og,rg,dg]
+
+  seq_hor=Sequence("Read UL", "SERIAL_READ_LR_STAGE1","END_SERIAL_READ_LR_STAGE1", allhclocks, lengths, sequencer=sequencer)
+
+  seq_read=Sequence("Skipper Read","PIT_SK_NDCR_SERIAL_READ","END_PIT_SK_NDCR_SERIAL_READ",
+                    allhclocks, lengths, sequencer=sequencer)
+
+  seq_done=Sequence("Clear Charge","SERIAL_READ_CLRCHG_STAGE_2","END_SERIAL_READ_CLRCHG_STAGE_2",
+                    allhclocks, lengths, sequencer=sequencer)
+
+  seq_full=seq_hor+seq_read+seq_read+seq_done
