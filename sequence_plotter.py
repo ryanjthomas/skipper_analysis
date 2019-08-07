@@ -26,7 +26,7 @@ RC_vclock = 2.35*us
 RC_hclock = 33*ns
 RC_sclock = 100*ns  
 
-instr_length=40*ns
+instr_delay=40*ns
 
 def hex_to_time(hexcode):
   code=format(int(hexcode,16), '0>8b')
@@ -48,37 +48,37 @@ def lowpass_filter(x,RC, step):
   b,a=butter(1,1./(np.pi*RC/step))
   return lfilter(b,a,x,zi=lfilter_zi(b,a)*x[0])[0]             
 
-class Lengths:
+class Delays:
   def __init__(self):
     self.len_strs=[]
-    self.lengths=[]
+    self.delays=[]
     
-  def add_length(self, len_str, length):
+  def add_delay(self, len_str, delay):
     self.len_strs.append(len_str)
-    self.lengths.append(length)
+    self.delays.append(delay)
 
-  def parse_length(self, len_str, sequencer):
+  def parse_delay(self, len_str, sequencer):
     for line in sequencer:
       line=clean_line(line)
       if re.match(len_str,line):
         self.len_strs.append(len_str)
-        self.lengths.append(hex_to_time(re.search('\$[0-9a-fA-F][0-9a-fA-F]', line).group()[1:]))
+        self.delays.append(hex_to_time(re.search('\$[0-9a-fA-F][0-9a-fA-F]', line).group()[1:]))
         return
 
     print("Warning, delay " + len_str + " not found")
     return -1
 
   def parse_line(self, line):
-    length=instr_length
+    delay=instr_delay
     line=clean_line(line)
-    if len(self.lengths)<1:
-      print("Warning, no lengths defined, returning default...")
-      return length
+    if len(self.delays)<1:
+      print("Warning, no delays defined, returning default...")
+      return delay
     
     for i,len_str in enumerate(self.len_strs):
       if len_str in line:
-        length+=self.lengths[i]
-    return length
+        delay+=self.delays[i]
+    return delay
   
 class Clock:
   def __init__(self,name,high_val_str, low_val_str, high_val, low_val, config=None,RC=1, initial_val=None, show=True, color=None, linestyle=None):
@@ -117,7 +117,7 @@ class Clock:
       return self.curr_val
 
 class Sequence:
-  def __init__(self, name, start_str, end_str, clocks, lengths,time_step=10*ns, valid_cmds=["VIDEO", "CLK2","CLK3"], sequencer=None):
+  def __init__(self, name, start_str, end_str, clocks, delays,time_step=10*ns, valid_cmds=["VIDEO", "CLK2","CLK3"], sequencer=None):
     self.name=name
     self.start_str=start_str
     self.clocks=clocks
@@ -125,7 +125,7 @@ class Sequence:
     self.time_step=time_step
     self.clock_seq=[]
     self.time_seq=[]
-    self.lengths=lengths
+    self.delays=delays
     self.valid_cmds=valid_cmds
     if sequencer is not None:
       self.parse_seq(sequencer)
@@ -156,8 +156,8 @@ class Sequence:
       #Maybe second condition not necessary after above
       if line.lstrip()=='' or line.lstrip()[0]==";" or not any(x in line for x in self.valid_cmds):
         continue
-      length=lengths.parse_line(line)
-      steps=int(length/self.time_step)
+      delay=delays.parse_line(line)
+      steps=int(delay/self.time_step)
       for clock in self.clocks:
         clock.parse_line(line)
 
@@ -271,22 +271,22 @@ if __name__=="__main__":
   with open('pit_super_sequencer_UW2_Paolo.waveforms') as f:
     sequencer=f.readlines()
     
-  lengths=Lengths()
-  lengths.parse_length("P_DELAY", sequencer)
-  lengths.parse_length("R_DELAY", sequencer)
-  lengths.parse_length("S_DELAY", sequencer)
-  lengths.parse_length("SW_DELAY", sequencer)
-  lengths.parse_length("VE_DELAY", sequencer)
-  lengths.parse_length("DCRST_DELAY", sequencer)
+  delays=Delays()
+  delays.parse_delay("P_DELAY", sequencer)
+  delays.parse_delay("R_DELAY", sequencer)
+  delays.parse_delay("S_DELAY", sequencer)
+  delays.parse_delay("SW_DELAY", sequencer)
+  delays.parse_delay("VE_DELAY", sequencer)
+  delays.parse_delay("DCRST_DELAY", sequencer)
 
-  lengths.add_length("RDL0",rg_delay*us)
-  lengths.add_length("PRD0",ped_delay*us)
-  lengths.add_length("DLY0",int_delay*us)
-  lengths.add_length("SWD0",sw_delay*us)
-  lengths.add_length("POD0",sig_delay*us)
-  lengths.add_length("DLY1",int_delay*us)
-  lengths.add_length("OGD0",og_delay*us)
-  lengths.add_length("DDL0",dg_delay*us)
+  delays.add_delay("RDL0",rg_delay*us)
+  delays.add_delay("PRD0",ped_delay*us)
+  delays.add_delay("DLY0",int_delay*us)
+  delays.add_delay("SWD0",sw_delay*us)
+  delays.add_delay("POD0",sig_delay*us)
+  delays.add_delay("DLY1",int_delay*us)
+  delays.add_delay("OGD0",og_delay*us)
+  delays.add_delay("DDL0",dg_delay*us)
   
   v12=Clock("V1_2","TwoV1H", "TwoV1L","two_vclock_hi","two_vclock_lo",config=config, RC=RC_vclock)
   v22=Clock("V2_2","TwoV2H", "TwoV2L","two_vclock_hi","two_vclock_lo",config=config, RC=RC_vclock)
@@ -310,9 +310,9 @@ if __name__=="__main__":
   vclocks.append(tg2)
 
   #Vertical clock sequences
-  seq_v1=Sequence("Vertical 1","PARALLEL_1","PARALLEL_2",vclocks, lengths, sequencer=sequencer)
-  seq_v2=Sequence("Vertical 2","PARALLEL_2","PARALLEL_12",vclocks, lengths, sequencer=sequencer)
-  seq_v12=Sequence("Vertical 12","PARALLEL_12","END_PARALLEL",vclocks, lengths, sequencer=sequencer)
+  seq_v1=Sequence("Vertical 1","PARALLEL_1","PARALLEL_2",vclocks, delays, sequencer=sequencer)
+  seq_v2=Sequence("Vertical 2","PARALLEL_2","PARALLEL_12",vclocks, delays, sequencer=sequencer)
+  seq_v12=Sequence("Vertical 12","PARALLEL_12","END_PARALLEL",vclocks, delays, sequencer=sequencer)
 
 
   hu3=Clock("HU3","HU3H", "HU3L","u_hclock_hi","u_hclock_lo",config=config, RC=RC_hclock)
@@ -325,9 +325,9 @@ if __name__=="__main__":
 
   hclocks=[hu1,hu2,hu3,hl1,hl2,hl3]
 
-  seq_hl=Sequence("Read L", "SERIAL_READ_L_STAGE1","END_SERIAL_READ_L_STAGE1", hclocks, lengths, sequencer=sequencer)
-  seq_hu=Sequence("Read U", "SERIAL_READ_R_STAGE1","END_SERIAL_READ_R_STAGE1", hclocks, lengths, sequencer=sequencer)
-  seq_hul=Sequence("Read UL", "SERIAL_READ_LR_STAGE1","END_SERIAL_READ_LR_STAGE1", hclocks, lengths, sequencer=sequencer)
+  seq_hl=Sequence("Read L", "SERIAL_READ_L_STAGE1","END_SERIAL_READ_L_STAGE1", hclocks, delays, sequencer=sequencer)
+  seq_hu=Sequence("Read U", "SERIAL_READ_R_STAGE1","END_SERIAL_READ_R_STAGE1", hclocks, delays, sequencer=sequencer)
+  seq_hul=Sequence("Read UL", "SERIAL_READ_LR_STAGE1","END_SERIAL_READ_LR_STAGE1", hclocks, delays, sequencer=sequencer)
   
   rg=Clock("RG","RH", "RL","rg_hi","rg_lo",config=config, RC=RC_sclock,color="blue")
   og=Clock("OG","OUTGH", "OUTGL","og_hi","og_lo",config=config, RC=RC_sclock,color="magenta")
@@ -337,19 +337,19 @@ if __name__=="__main__":
   sclocks=[hu3,rg,og,sw,dg]
   
   seq_skip=Sequence("Skipper Read","PIT_SK_NDCR_SERIAL_READ","END_PIT_SK_NDCR_SERIAL_READ",
-                    sclocks, lengths, sequencer=sequencer)
+                    sclocks, delays, sequencer=sequencer)
 
   seq_clrchrg=Sequence("Clear Charge","SERIAL_READ_CLRCHG_STAGE_2","END_SERIAL_READ_CLRCHG_STAGE_2",
-                       sclocks, lengths, sequencer=sequencer)
+                       sclocks, delays, sequencer=sequencer)
 
   allhclocks=[hu1,hu2,hu3,hl1,hl2,hl3,sw,og,rg,dg]
 
-  seq_hor=Sequence("Read UL", "SERIAL_READ_LR_STAGE1","END_SERIAL_READ_LR_STAGE1", allhclocks, lengths, sequencer=sequencer)
+  seq_hor=Sequence("Read UL", "SERIAL_READ_LR_STAGE1","END_SERIAL_READ_LR_STAGE1", allhclocks, delays, sequencer=sequencer)
 
   seq_read=Sequence("Skipper Read","PIT_SK_NDCR_SERIAL_READ","END_PIT_SK_NDCR_SERIAL_READ",
-                    allhclocks, lengths, sequencer=sequencer)
+                    allhclocks, delays, sequencer=sequencer)
 
   seq_done=Sequence("Clear Charge","SERIAL_READ_CLRCHG_STAGE_2","END_SERIAL_READ_CLRCHG_STAGE_2",
-                    allhclocks, lengths, sequencer=sequencer)
+                    allhclocks, delays, sequencer=sequencer)
 
   seq_full=seq_hor+seq_read+seq_read+seq_done
