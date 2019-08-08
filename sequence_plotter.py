@@ -258,7 +258,7 @@ if __name__=="__main__":
     config=ConfigParser(inline_comment_prefixes=";")
   else:
     config=ConfigParser()
-  config.read("Config.ini")
+  config.read(cfname)
 
   int_delay=config.getfloat("timing","IntegralTime")
   ped_delay=config.getfloat("timing","PedestalIntgWait")
@@ -268,7 +268,7 @@ if __name__=="__main__":
   dg_delay=config.getfloat("timing","DGWidth")
   rg_delay=config.getfloat("timing","SkippingRGWidth")
   
-  with open('pit_super_sequencer_UW2_Paolo.waveforms') as f:
+  with open(sfname) as f:
     sequencer=f.readlines()
     
   delays=Delays()
