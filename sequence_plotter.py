@@ -353,3 +353,6 @@ if __name__=="__main__":
                     allhclocks, delays, sequencer=sequencer)
 
   seq_full=seq_hor+seq_read+seq_read+seq_done
+
+
+  seq_full.plot()
