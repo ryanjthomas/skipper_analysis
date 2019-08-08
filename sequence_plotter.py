@@ -182,9 +182,9 @@ class Sequence:
   def show(self, *args, **kwargs):
     self.plot(*args, **kwargs)
     
-  def plot(self, filtered=True, unit=us,legend=True, ygap=.5):
+  def plot(self, filtered=True, unit=us,legend=True):
     '''
-    Plots the sequence. By default shows the sequencer after RC filtering, use filtered=False to show the raw sequence. Can specify units of either us or ns. Setting legend true displays the plot label as a legend, otherwise it's shown on the y axis. ygap adds to the min/max range in the y scale so you can see the clock easier.
+    Plots the sequence. By default shows the sequencer after RC filtering, use filtered=False to show the raw sequence. Can specify units of either us or ns. Setting legend true displays the plot label as a legend, otherwise it's shown on the y axis.
     '''
     fig=plt.figure()
     nplots=0
@@ -203,7 +203,8 @@ class Sequence:
         plt.plot(self.time_seq/unit, data, label=clock.name, color=clock.color, linestyle=clock.linestyle)
         plt.tick_params(labelbottom=False)
         plt.yticks([clock.low_val, clock.high_val])
-        plt.ylim(clock.low_val-ygap, clock.high_val+ygap)
+        yrange=clock.high_val-clock.low_val
+        plt.ylim(clock.low_val-yrange*0.2, clock.high_val+yrange*0.2)
         if legend:
           plt.legend()
         else:
