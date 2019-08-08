@@ -9,6 +9,12 @@ except:
   print("Warning: matplotlib not found, plotting will not work...")
   mpl=False
 
+try:
+  from pyds9 import DS9
+  pyds9=True
+except:
+  pyds9=False
+  
 fitter=None
 fitters=[]  
 #Had issues getting iminuit to work, curve_fit works fine for now
@@ -172,6 +178,7 @@ class SkipperImage:
     self._reset_derived()
 
     self.figures=[]
+    self.ds9=None
     
   def set_params(self,nskips=None, pre_skips=None, post_skips=None, invert=None, *args, **kwars):
     '''
@@ -285,14 +292,24 @@ class SkipperImage:
     '''
     Function to draw the image after combining skips.
     '''
+    
     if not mpl:
       print("Error, matplotlib not found, cannot draw image...")
       return False
 
     self.combine_skips(*args, **kwargs)
-    fig, mesh=plot_2d(self.image_means)
-    self.figures.append(fig)
-    return True
+    if pyds9:
+      if self.ds9 is None:
+        self.ds9=DS9()
+      print("Drawing to DS9")
+      self.ds9.set_np2arr(self.image_means)
+      self.ds9.set("scale histequ")
+      return True
+    else:
+      print("Drawing using matplotlib")
+      fig, mesh=plot_2d(self.image_means)
+      self.figures.append(fig)
+      return True
     
   def compute_charge_mask(self, *args, **kwargs):
     '''
